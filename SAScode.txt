@@ -1,0 +1,202 @@
+data whas;
+  infile "F:\course\590\hw\hw2\whas.dat";
+  input id age sex cpk sho chf miord mitype year yrgrp lenstay dstat lenfol fstat;
+run;
+
+proc lifetest data=whas plot=(d ls h);
+time age;
+test miord;
+strata miord;
+run;
+
+proc corr data=whas plots(maxpoints=none)=matrix;
+var age sex cpk sho chf miord mitype lenfol;
+run;
+
+/*KM estimate*/
+proc lifetest data=whas plots=survival;
+time lenfol*fstat(0);
+test age sex cpk sho chf miord mitype year;
+run;
+/*check ph assumption on sex*/
+proc lifetest data=whas conftype=linear plots=(survival(cl) lls ls)  outsurv=a;
+time lenfol*fstat(0);
+strata sex;
+run;
+
+
+/*get how many ties to see whether should take ties into consideration*/
+proc freq data=whas;
+table lenfol;
+run;
+
+/*stepwise selection without interaction*/
+proc phreg data=whas;
+     model lenfol*fstat(0)=age sex cpk sho chf miord mitype/selection=stepwise ties=efron sle=0.25 sls=0.1 ties=exact;
+	
+run;
+proc phreg data=whas;
+    model lenfol*fstat(0)=age sho chf miord/ties=exact;
+run;
+/*from stepwise we can see that cpk is not contribute much, add sex and mitype into the model to see if something confounding.*/
+proc phreg data=whas;
+    model lenfol*fstat(0)=age sho chf miord sex/ties=exact;
+	run;
+proc phreg data=whas;
+	model lenfol*fstat(0)=age sho chf miord mitype/ties=exact;
+	run;
+
+
+/*stepwise selection with interaction*/
+proc phreg data=whas;
+     model lenfol*fstat(0)=age | sho |chf| miord /selection=stepwise ties=efron sle=0.5 sls=0.05 ties=exact;
+run;
+proc phreg data=whas;
+	 model lenfol*fstat(0)=age sho chf miord  age_sho sho_chf sho_miord /rl ties=exact;
+	 age_sho=age*sho;
+	 sho_chf=sho*chf;
+	 sho_miord=sho*miord;
+	 run;
+
+/*check ph assumption by plot*/
+proc lifetest data=whas conftype=linear plots=(lls s ls) ;
+time lenfol*fstat(0);
+strata sho;
+run;
+proc lifetest data=whas conftype=linear plots=(lls s ls) ;
+time lenfol*fstat(0);
+strata chf;
+run;
+proc lifetest data=whas conftype=linear plots=(lls s ls) ;
+time lenfol*fstat(0);
+strata miord;
+run;
+proc freq data=whas;
+table age;
+run;
+proc freq data=whas;
+table cpk;
+run;
+data whas2;
+set whas;
+if age<=62 then ageg=1;
+   else if 62<age<=75  then ageg=2 ;
+else if 75<age then ageg=3 ;
+run;
+data whas2;
+set whas2;
+if cpk<=98 then cpkg=1;
+    else if 98<cpk<=170 then cpkg=2;
+	    else if 170<cpk then cpkg=3;
+run;
+proc lifetest data=whas2 conftype=linear plots=(lls s ls);
+time lenfol*fstat(0);
+strata ageg ;
+run;
+proc lifetest data=whas2 plots=(lls s ls);
+time lenfol*fstat(0);
+strata cpkg;
+run;
+proc lifetest data=whas plots=(lls s ls);
+time lenfol*fstat(0);
+strata year;
+run;
+proc lifetest data=whas plots=(lls s ls);
+time lenfol*fstat(0);
+strata yrgrp;
+run;
+
+
+/*use assess statement to check age leaner function and ph assumption.*/
+ proc phreg data=whas;
+	 model lenfol*fstat(0)=age sho chf miord  age_sho sho_miord sho_chf/rl ties=exact;
+	 age_sho=age*sho;
+	 sho_miord=sho*miord;
+	 sho_chf=sho*chf;
+  assess  var=(age ) ph/resample;
+	 run;
+
+
+/*assuming miord is not interact with other variables.*/
+ proc phreg data=whas2;
+	 model lenfol*fstat(0)=age sho chf  age_sho sho_chf/rl ties=exact;
+	 age_sho=age*sho;
+	 sho_chf=sho*chf;
+  strata miord mitype cpkg;
+	 run;
+proc phreg data=whas2;
+	 model lenfol*fstat(0)=age sho chf  age_sho sho_chf/rl ties=exact;
+	 age_sho=age*sho;
+	 sho_chf=sho*chf;
+  strata miord mitype cpkg yrgrp;
+	 run;
+proc phreg data=whas2;
+   model lenfol*fstat(0)=age sho chf/rl ties=exact;
+   strata miord mitype cpkg yrgrp;
+   run;
+/*check interaction with other viriables*/
+ proc phreg data=whas2;
+	 model lenfol*fstat(0)=age sho chf age_miord age_yrgrp age_mitype age_cpkg
+            sho_yrgrp sho_mitype sho_miord sho_cpkg
+            chf_miord chf_yrgrp chf_mitype chf_cpkg/rl ties=exact;
+	 age_miord=age*miord;
+	 age_yrgrp=age*yrgrp;
+	 age_mitype=age*mitype;
+	 age_cpkg=age*cpkg;
+	 sho_miord=sho*miord;
+	 sho_yrgrp=sho*yrgrp;
+	 sho_mitype=sho*mitype;
+	 sho_cpkg=sho*cpkg;
+	 chf_miord=chf*miord;
+	 chf_yrgrp=chf*yrgrp;
+	 chf_mitype=chf*mitype;
+	 chf_cpkg=chf*cpkg;
+  strata miord yrgrp mitype cpkg;
+	 run;
+
+ 
+/*check interaction with other viriables*/
+ proc phreg data=whas2;
+	 model lenfol*fstat(0)=age sho chf
+            sho_yrgrp  sho_miord /rl ties=exact;
+	 sho_miord=sho*miord;
+	 sho_yrgrp=sho*yrgrp;
+  strata miord yrgrp mitype cpkg;
+	 run;
+ proc phreg data=whas2;
+	 model lenfol*fstat(0)=age sho chf
+             sho_miord /rl ties=exact;
+	 sho_miord=sho*miord;
+  strata miord yrgrp mitype cpkg;
+	 run;
+
+proc phreg data=whas2;
+	 model lenfol*fstat(0)=age sho chf
+             sho_miord x/rl ties=exact;
+	 sho_miord=sho*miord; 
+if lenstay<lenfol then x=0;
+   else x=1;
+strata yrgrp miord mitype cpkg;
+run;
+
+proc lifereg data=whas;
+     model lenfol*fstat(0)=age sex cpk sho chf miord mitype/dist=exponential;
+probplot;
+run;
+proc lifereg data=whas;
+     model lenfol*fstat(0)=age sex cpk sho chf miord mitype/dist=weibull;
+probplot;
+run;
+proc lifereg data=whas;
+     model lenfol*fstat(0)=age sex cpk sho chf miord mitype/dist=llogistic;
+probplot;
+run;
+proc lifereg data=whas;
+     model lenfol*fstat(0)=age sex cpk sho chf miord mitype/dist=logistic;
+probplot;
+run;
+proc lifereg data=whas;
+     model lenfol*fstat(0)=age sex cpk sho chf miord mitype/dist=lnormal;
+probplot;
+run;
+
